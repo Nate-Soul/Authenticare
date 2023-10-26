@@ -5,7 +5,8 @@ import User from "../models/user.model.js";
 // @route GET /api/users
 // @access public
 const getUsers = asyncHandler(async (req, res) => {
-    res.status(200).json({'detail': 'Fetched all active user profiles'});
+    const users = await User.find();
+    res.status(200).json(users);
 });
 
 // @desc Get user profile by username or some other unique parameter
@@ -14,7 +15,8 @@ const getUsers = asyncHandler(async (req, res) => {
 const getUser = asyncHandler(async (req, res) => {
     const user = {
         _id: req.user._id,
-        name: req.user.name,
+        first_name: req.user.first_name,
+        last_name: req.user.last_name,
         email: req.user.email
     }
 
@@ -30,17 +32,19 @@ const updateUser = asyncHandler(async (req, res) => {
     try{
         const user = await User.findById(req.user._id);
         if (user){
-            user.name = req.body.name || user.name;
-            user.email = req.body.email || user.email;
-    
+            user.first_name = req.body.first_name || user.first_name;
+            user.last_name  = req.body.last_name || user.last_name;
+            user.email      = req.body.email || user.email;
+
             if(req.body.password){
-                user.password = req.body.password
+                user.password = req.body.password;
             }
-    
+            
             const updatedUser = await user.save();
             res.status(200).json({
                 _id: updatedUser._id,
-                name: updatedUser.name,
+                first_name: updatedUser.first_name,
+                last_name: updatedUser.last_name,
                 email: updatedUser.email
             });
         } else {

@@ -2,8 +2,10 @@ import asyncHandler from "express-async-handler";
 import User from "../models/user.model.js";
 import generateToken from "../utils/generateToken.js";
 
+const development = Boolean(process.env.DEBUG);
+
 export const register = asyncHandler(async (req, res) => {
-    const { name, email, password } = req.body;
+    const { first_name, last_name, email, password } = req.body;
 
     const userExists = await User.findOne({email});
     if(userExists){
@@ -12,7 +14,8 @@ export const register = asyncHandler(async (req, res) => {
     }
 
     const user = await User.create({
-        name,
+        first_name,
+        last_name,
         email,
         password,
     });
@@ -21,9 +24,13 @@ export const register = asyncHandler(async (req, res) => {
         generateToken(res, user._id);
         res.status(201).json({
             _id: user._id,
-            name: user.name,
+            first_name: user.first_name,
+            last_name: user.last_name,
             email: user.email,
         });
+        if (development === true){
+            console.log(`${req.method}: ${res.statusCode} | New user created`);
+        }
     } else {
         res.status(400);
         throw new Error("Invalid User Profile");
@@ -39,7 +46,8 @@ export const login = asyncHandler(async (req, res) => {
         generateToken(res, user._id);
         res.status(200).json({
             _id: user._id,
-            name: user.name,
+            first_name: user.first_name,
+            last_name: user.last_name,
             email: user.email,
         });
     } else {
@@ -53,5 +61,5 @@ export const logout = asyncHandler(async (req, res) => {
         httpOnly: true,
         expires: new Date(0)
     });
-    res.status(404).json({'message': 'You\'ve been logged out of the multi galaxies of madness' });
+    res.status(204).json({'message': 'You\'ve been logged out of the multi galaxies of madness' });
 }); 

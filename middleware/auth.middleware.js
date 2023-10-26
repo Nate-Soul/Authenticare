@@ -8,7 +8,7 @@ export const verifyToken = asyncHandler(async (req, res, next) => {
         try {
             const decoded = jwt.verify(access_token, process.env.JWT_SECRET);
             req.user = await User.findById(decoded.userId).select('-password');
-            next(); // Call next() to continue to the next middleware
+            next();
         } catch (error) {
             res.status(403);
             throw new Error("Invalid token!");
