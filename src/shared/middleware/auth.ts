@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 import { AppError } from "../utils/AppError.js";
 import { verifyAccessToken } from "../utils/tokens.js";
+import { userRepository } from "../db/index.js";
 import type { UserRole } from "../types/user.js";
 
 export function requireAuth(req: Request, _res: Response, next: NextFunction): void {
@@ -27,6 +28,20 @@ export function requireRole(...roles: UserRole[]) {
     if (!roles.includes(req.auth.role)) {
       return next(AppError.forbidden("You do not have permission to perform this action"));
     }
+    next();
+  };
+}
+
+/**
+ * Gate a route on a verified email. Must run AFTER requireAuth (it reads req.auth).
+ * Responds 403 EMAIL_NOT_VERIFIED when the authenticated user's email is unverified.
+ */
+export function requireVerified() {
+  return async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
+    if (!req.auth) return next(AppError.unauthorized());
+    const user = await userRepository.findById(req.auth.userId);
+    if (!user) return next(AppError.unauthorized());
+    if (!user.emailVerified) return next(new AppError("Email not verified", 403, "EMAIL_NOT_VERIFIED"));
     next();
   };
 }
