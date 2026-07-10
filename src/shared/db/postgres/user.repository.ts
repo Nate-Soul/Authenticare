@@ -29,6 +29,11 @@ function toEntity(row: PrismaUser): UserEntity {
     password: row.password,
     role: row.role,
     tokenVersion: row.tokenVersion,
+    emailVerified: row.emailVerified,
+    verificationTokenHash: row.verificationTokenHash,
+    verificationTokenExpiresAt: row.verificationTokenExpiresAt,
+    passwordResetTokenHash: row.passwordResetTokenHash,
+    passwordResetExpiresAt: row.passwordResetExpiresAt,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
     deletedAt: row.deletedAt,
@@ -117,5 +122,56 @@ export class PostgresUserRepository implements UserRepository {
 
   async incrementTokenVersion(id: string): Promise<void> {
     await prisma.user.update({ where: { id }, data: { tokenVersion: { increment: 1 } } });
+  }
+
+  async hashPassword(plain: string): Promise<string> {
+    return bcrypt.hash(plain, env.BCRYPT_COST);
+  }
+
+  async setVerificationToken(id: string, hash: string, expiresAt: Date): Promise<void> {
+    await prisma.user.update({
+      where: { id },
+      data: { verificationTokenHash: hash, verificationTokenExpiresAt: expiresAt },
+    });
+  }
+
+  async findByVerificationTokenHash(hash: string): Promise<UserEntity | null> {
+    const row = await prisma.user.findFirst({
+      where: { verificationTokenHash: hash, verificationTokenExpiresAt: { gt: new Date() }, deletedAt: null },
+    });
+    return row ? toEntity(row) : null;
+  }
+
+  async markEmailVerified(id: string): Promise<void> {
+    await prisma.user.update({
+      where: { id },
+      data: { emailVerified: true, verificationTokenHash: null, verificationTokenExpiresAt: null },
+    });
+  }
+
+  async setPasswordResetToken(id: string, hash: string, expiresAt: Date): Promise<void> {
+    await prisma.user.update({
+      where: { id },
+      data: { passwordResetTokenHash: hash, passwordResetExpiresAt: expiresAt },
+    });
+  }
+
+  async findByPasswordResetTokenHash(hash: string): Promise<UserEntity | null> {
+    const row = await prisma.user.findFirst({
+      where: { passwordResetTokenHash: hash, passwordResetExpiresAt: { gt: new Date() }, deletedAt: null },
+    });
+    return row ? toEntity(row) : null;
+  }
+
+  async resetPassword(id: string, newHashedPassword: string): Promise<void> {
+    await prisma.user.update({
+      where: { id },
+      data: {
+        password: newHashedPassword,
+        passwordResetTokenHash: null,
+        passwordResetExpiresAt: null,
+        tokenVersion: { increment: 1 },
+      },
+    });
   }
 }

@@ -13,6 +13,13 @@ export interface UserEntity {
   password: string; // hashed — never returned to clients, see toPublicUser()
   role: UserRole;
   tokenVersion: number; // incremented on refresh-rotation and logout to revoke old refresh tokens
+  emailVerified: boolean;
+  // Email-verification and password-reset tokens are stored ONLY as SHA-256 hashes,
+  // never as the raw token, and are single-use (cleared on consumption) + time-limited.
+  verificationTokenHash: string | null;
+  verificationTokenExpiresAt: Date | null;
+  passwordResetTokenHash: string | null;
+  passwordResetExpiresAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
   deletedAt: Date | null;
@@ -24,6 +31,7 @@ export interface PublicUser {
   lastName: string;
   email: string;
   role: UserRole;
+  emailVerified: boolean;
   createdAt: Date;
 }
 
@@ -34,6 +42,7 @@ export function toPublicUser(user: UserEntity): PublicUser {
     lastName: user.lastName,
     email: user.email,
     role: user.role,
+    emailVerified: user.emailVerified,
     createdAt: user.createdAt,
   };
 }
@@ -80,4 +89,24 @@ export interface UserRepository {
   softDelete(id: string): Promise<boolean>;
   verifyPassword(user: UserEntity, plainPassword: string): Promise<boolean>;
   incrementTokenVersion(id: string): Promise<void>;
+
+  /** Hash a plaintext password with the driver's configured bcrypt cost. Keeps bcrypt out of the service. */
+  hashPassword(plain: string): Promise<string>;
+
+  // Email verification — tokens stored as SHA-256 hashes, single-use, time-limited.
+  setVerificationToken(id: string, hash: string, expiresAt: Date): Promise<void>;
+  /** Returns the user only if the hash matches AND the token has not expired (and is not soft-deleted). */
+  findByVerificationTokenHash(hash: string): Promise<UserEntity | null>;
+  /** Marks the email verified and clears the verification token fields (single-use). */
+  markEmailVerified(id: string): Promise<void>;
+
+  // Password reset — tokens stored as SHA-256 hashes, single-use, time-limited.
+  setPasswordResetToken(id: string, hash: string, expiresAt: Date): Promise<void>;
+  /** Returns the user only if the hash matches AND the token has not expired (and is not soft-deleted). */
+  findByPasswordResetTokenHash(hash: string): Promise<UserEntity | null>;
+  /**
+   * Sets an already-hashed password (produced by hashPassword), clears the reset token
+   * fields (single-use), and bumps tokenVersion to revoke every outstanding session.
+   */
+  resetPassword(id: string, newHashedPassword: string): Promise<void>;
 }

@@ -1,4 +1,6 @@
+import bcrypt from "bcryptjs";
 import { UserModel, type UserDocument } from "./user.schema.js";
+import { env } from "../../../config/env.js";
 import { AppError } from "../../utils/AppError.js";
 import type {
   UserRepository,
@@ -22,6 +24,13 @@ function toEntity(doc: UserDocument): UserEntity {
     password: doc.password,
     role: doc.role,
     tokenVersion: doc.tokenVersion,
+    emailVerified: doc.emailVerified,
+    // Token-hash fields are `select: false`; on reads that don't request them they arrive
+    // as undefined — normalize to null so the entity shape is stable across drivers.
+    verificationTokenHash: doc.verificationTokenHash ?? null,
+    verificationTokenExpiresAt: doc.verificationTokenExpiresAt ?? null,
+    passwordResetTokenHash: doc.passwordResetTokenHash ?? null,
+    passwordResetExpiresAt: doc.passwordResetExpiresAt ?? null,
     createdAt: doc.createdAt,
     updatedAt: doc.updatedAt,
     deletedAt: doc.deletedAt,
@@ -101,5 +110,60 @@ export class MongoUserRepository implements UserRepository {
 
   async incrementTokenVersion(id: string): Promise<void> {
     await UserModel.updateOne({ _id: id }, { $inc: { tokenVersion: 1 } });
+  }
+
+  async hashPassword(plain: string): Promise<string> {
+    return bcrypt.hash(plain, env.BCRYPT_COST);
+  }
+
+  async setVerificationToken(id: string, hash: string, expiresAt: Date): Promise<void> {
+    await UserModel.updateOne(
+      { _id: id },
+      { verificationTokenHash: hash, verificationTokenExpiresAt: expiresAt },
+    );
+  }
+
+  async findByVerificationTokenHash(hash: string): Promise<UserEntity | null> {
+    const doc = await UserModel.findOne({
+      verificationTokenHash: hash,
+      verificationTokenExpiresAt: { $gt: new Date() },
+    }).select("+verificationTokenHash +verificationTokenExpiresAt");
+    return doc ? toEntity(doc) : null;
+  }
+
+  async markEmailVerified(id: string): Promise<void> {
+    // updateOne bypasses the password-hashing pre-save hook — safe for non-password writes.
+    await UserModel.updateOne(
+      { _id: id },
+      { emailVerified: true, verificationTokenHash: null, verificationTokenExpiresAt: null },
+    );
+  }
+
+  async setPasswordResetToken(id: string, hash: string, expiresAt: Date): Promise<void> {
+    await UserModel.updateOne(
+      { _id: id },
+      { passwordResetTokenHash: hash, passwordResetExpiresAt: expiresAt },
+    );
+  }
+
+  async findByPasswordResetTokenHash(hash: string): Promise<UserEntity | null> {
+    const doc = await UserModel.findOne({
+      passwordResetTokenHash: hash,
+      passwordResetExpiresAt: { $gt: new Date() },
+    }).select("+password +passwordResetTokenHash +passwordResetExpiresAt");
+    return doc ? toEntity(doc) : null;
+  }
+
+  async resetPassword(id: string, newHashedPassword: string): Promise<void> {
+    // Write the already-hashed password via updateOne so the pre-save re-hash hook does NOT run.
+    await UserModel.updateOne(
+      { _id: id },
+      {
+        password: newHashedPassword,
+        passwordResetTokenHash: null,
+        passwordResetExpiresAt: null,
+        $inc: { tokenVersion: 1 },
+      },
+    );
   }
 }

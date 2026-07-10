@@ -10,6 +10,11 @@ export interface UserDocument extends Document {
   password: string;
   role: UserRole;
   tokenVersion: number;
+  emailVerified: boolean;
+  verificationTokenHash: string | null;
+  verificationTokenExpiresAt: Date | null;
+  passwordResetTokenHash: string | null;
+  passwordResetExpiresAt: Date | null;
   deletedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
@@ -24,6 +29,12 @@ const userSchema = new Schema<UserDocument>(
     password: { type: String, required: true, select: false },
     role: { type: String, enum: ["user", "admin"], default: "user" },
     tokenVersion: { type: Number, default: 0 },
+    emailVerified: { type: Boolean, default: false },
+    // Token hashes are `select: false` so they never ride along on ordinary reads.
+    verificationTokenHash: { type: String, default: null, select: false },
+    verificationTokenExpiresAt: { type: Date, default: null, select: false },
+    passwordResetTokenHash: { type: String, default: null, select: false },
+    passwordResetExpiresAt: { type: Date, default: null, select: false },
     deletedAt: { type: Date, default: null },
   },
   { timestamps: true },
@@ -58,5 +69,7 @@ userSchema.methods.matchPassword = async function (plain: string): Promise<boole
 };
 
 userSchema.index({ createdAt: -1 });
+userSchema.index({ verificationTokenHash: 1 });
+userSchema.index({ passwordResetTokenHash: 1 });
 
 export const UserModel = model<UserDocument>("User", userSchema);

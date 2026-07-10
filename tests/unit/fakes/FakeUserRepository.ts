@@ -26,6 +26,11 @@ export class FakeUserRepository implements UserRepository {
       password: await bcrypt.hash(input.password, 4), // low cost factor: tests only
       role: input.role ?? "user",
       tokenVersion: 0,
+      emailVerified: false,
+      verificationTokenHash: null,
+      verificationTokenExpiresAt: null,
+      passwordResetTokenHash: null,
+      passwordResetExpiresAt: null,
       createdAt: now,
       updatedAt: now,
       deletedAt: null,
@@ -82,5 +87,66 @@ export class FakeUserRepository implements UserRepository {
   async incrementTokenVersion(id: string): Promise<void> {
     const user = this.users.get(id);
     if (user) user.tokenVersion += 1;
+  }
+
+  async hashPassword(plain: string): Promise<string> {
+    return bcrypt.hash(plain, 4); // low cost factor: tests only
+  }
+
+  async setVerificationToken(id: string, hash: string, expiresAt: Date): Promise<void> {
+    const user = this.users.get(id);
+    if (user) {
+      user.verificationTokenHash = hash;
+      user.verificationTokenExpiresAt = expiresAt;
+    }
+  }
+
+  async findByVerificationTokenHash(hash: string): Promise<UserEntity | null> {
+    const user = [...this.users.values()].find(
+      (u) =>
+        u.verificationTokenHash === hash &&
+        u.verificationTokenExpiresAt !== null &&
+        u.verificationTokenExpiresAt > new Date() &&
+        !u.deletedAt,
+    );
+    return user ? { ...user } : null;
+  }
+
+  async markEmailVerified(id: string): Promise<void> {
+    const user = this.users.get(id);
+    if (user) {
+      user.emailVerified = true;
+      user.verificationTokenHash = null;
+      user.verificationTokenExpiresAt = null;
+    }
+  }
+
+  async setPasswordResetToken(id: string, hash: string, expiresAt: Date): Promise<void> {
+    const user = this.users.get(id);
+    if (user) {
+      user.passwordResetTokenHash = hash;
+      user.passwordResetExpiresAt = expiresAt;
+    }
+  }
+
+  async findByPasswordResetTokenHash(hash: string): Promise<UserEntity | null> {
+    const user = [...this.users.values()].find(
+      (u) =>
+        u.passwordResetTokenHash === hash &&
+        u.passwordResetExpiresAt !== null &&
+        u.passwordResetExpiresAt > new Date() &&
+        !u.deletedAt,
+    );
+    return user ? { ...user } : null;
+  }
+
+  async resetPassword(id: string, newHashedPassword: string): Promise<void> {
+    const user = this.users.get(id);
+    if (user) {
+      user.password = newHashedPassword;
+      user.passwordResetTokenHash = null;
+      user.passwordResetExpiresAt = null;
+      user.tokenVersion += 1;
+    }
   }
 }
