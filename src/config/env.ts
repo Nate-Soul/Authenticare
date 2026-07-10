@@ -1,0 +1,58 @@
+import "dotenv/config";
+import { z } from "zod";
+
+const envSchema = z
+  .object({
+    NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+    PORT: z.coerce.number().int().positive().default(5000),
+
+    // Which repository implementation to wire up. Delete the driver folder
+    // you don't need under src/shared/db/ and drop the other option here.
+    DB_DRIVER: z.enum(["mongo", "postgres"]).default("mongo"),
+    MONGO_URI: z.string().optional(),
+    DATABASE_URL: z.string().optional(),
+
+    JWT_ACCESS_SECRET: z.string().min(32, "JWT_ACCESS_SECRET must be at least 32 characters"),
+    JWT_REFRESH_SECRET: z.string().min(32, "JWT_REFRESH_SECRET must be at least 32 characters"),
+    ACCESS_TOKEN_TTL: z.string().default("15m"),
+    REFRESH_TOKEN_TTL: z.string().default("30d"),
+    REFRESH_TOKEN_TTL_MS: z.coerce.number().int().positive().default(30 * 24 * 60 * 60 * 1000),
+
+    BCRYPT_COST: z.coerce.number().int().min(12).default(12),
+
+    CORS_ORIGIN: z.string().default("http://localhost:3000"),
+
+    RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(15 * 60 * 1000),
+    RATE_LIMIT_MAX: z.coerce.number().int().positive().default(100),
+    AUTH_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(15 * 60 * 1000),
+    AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),
+  })
+  .superRefine((val, ctx) => {
+    if (val.DB_DRIVER === "mongo" && !val.MONGO_URI) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "MONGO_URI is required when DB_DRIVER=mongo",
+        path: ["MONGO_URI"],
+      });
+    }
+    if (val.DB_DRIVER === "postgres" && !val.DATABASE_URL) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "DATABASE_URL is required when DB_DRIVER=postgres",
+        path: ["DATABASE_URL"],
+      });
+    }
+  });
+
+const parsed = envSchema.safeParse(process.env);
+
+if (!parsed.success) {
+  // eslint-disable-next-line no-console
+  console.error("❌ Invalid environment configuration:");
+  // eslint-disable-next-line no-console
+  console.error(parsed.error.flatten().fieldErrors);
+  process.exit(1);
+}
+
+export const env = parsed.data;
+export type Env = typeof env;
