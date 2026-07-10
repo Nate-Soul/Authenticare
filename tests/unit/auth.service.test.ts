@@ -6,6 +6,7 @@ import { AppError } from "../../src/shared/utils/AppError.js";
 describe("AuthService", () => {
   let repo: FakeUserRepository;
   let service: AuthService;
+  let sent: { to: string; link: string }[];
 
   const validInput = {
     firstName: "Ada",
@@ -16,7 +17,12 @@ describe("AuthService", () => {
 
   beforeEach(() => {
     repo = new FakeUserRepository();
-    service = new AuthService(repo);
+    sent = [];
+    // Inject a capturing email sender so email flows are testable without any infra.
+    service = new AuthService(repo, async (msg) => {
+      const m = msg.text.match(/https?:\/\/\S+/);
+      sent.push({ to: msg.to, link: m ? m[0] : "" });
+    });
   });
 
   it("registers a new user and returns tokens without exposing the password hash", async () => {
@@ -76,5 +82,58 @@ describe("AuthService", () => {
     const { user, tokens } = await service.register(validInput);
     await service.logout(user.id);
     await expect(service.refresh(tokens.refreshToken)).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+  });
+
+  it("register issues a verification email with a working token", async () => {
+    const { user } = await service.register(validInput);
+    expect(sent).toHaveLength(1);
+    const token = new URL(sent[0]!.link).searchParams.get("token")!;
+    await service.verifyEmail(token);
+    const after = await repo.findById(user.id);
+    expect(after?.emailVerified).toBe(true);
+  });
+
+  it("verifyEmail consumes the token so it cannot be replayed", async () => {
+    await service.register(validInput);
+    const token = new URL(sent[0]!.link).searchParams.get("token")!;
+    await service.verifyEmail(token);
+    // Single-use: the same token must not verify a second time.
+    await expect(service.verifyEmail(token)).rejects.toMatchObject({ code: "BAD_REQUEST" });
+  });
+
+  it("rejects an invalid or expired verification token", async () => {
+    await expect(service.verifyEmail("nope")).rejects.toMatchObject({ code: "BAD_REQUEST" });
+  });
+
+  it("resendVerification re-issues a link for an unverified account", async () => {
+    await service.register(validInput);
+    sent.length = 0;
+    await expect(service.resendVerification(validInput.email)).resolves.toBeUndefined();
+    expect(sent).toHaveLength(1);
+  });
+
+  it("resendVerification is a silent no-op for unknown or already-verified accounts", async () => {
+    await expect(service.resendVerification("ghost@example.com")).resolves.toBeUndefined();
+    expect(sent).toHaveLength(0);
+  });
+
+  it("forgotPassword never reveals whether the email exists", async () => {
+    await expect(service.forgotPassword("ghost@example.com")).resolves.toBeUndefined();
+    expect(sent).toHaveLength(0);
+  });
+
+  it("resetPassword sets the new password and revokes existing sessions", async () => {
+    const { user, tokens } = await service.register(validInput);
+    await service.forgotPassword(validInput.email);
+    const link = sent.at(-1)!.link;
+    const token = new URL(link).searchParams.get("token")!;
+    await service.resetPassword(token, "N3wStrongPass");
+    await expect(service.login({ email: validInput.email, password: "N3wStrongPass" })).resolves.toBeDefined();
+    await expect(service.refresh(tokens.refreshToken)).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    void user;
+  });
+
+  it("rejects an invalid or expired reset token", async () => {
+    await expect(service.resetPassword("nope", "N3wStrongPass")).rejects.toMatchObject({ code: "BAD_REQUEST" });
   });
 });
