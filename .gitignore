@@ -2,7 +2,6 @@
 
 # Internal brainstorming/spec artifacts — never publish to the template repo
 docs/superpowers/
-prompt.log
 CLAUDE.md
 
 node_modules/
@@ -11,6 +10,7 @@ coverage/
 .env
 .env.*.local
 *.log
+logs/
 prisma/*.db
 .DS_Store
 # Prisma generated client (regenerated on install)

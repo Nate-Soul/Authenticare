@@ -34,7 +34,12 @@ const envSchema = z
     SMTP_PORT: z.coerce.number().int().positive().optional(),
     SMTP_USER: z.string().optional(),
     SMTP_PASS: z.string().optional(),
-    SMTP_SECURE: z.coerce.boolean().default(false),
+    // NOTE: do not use z.coerce.boolean() here — it applies Boolean(str), so the
+    // string "false" coerces to true. Match the literal instead.
+    SMTP_SECURE: z
+      .enum(["true", "false"])
+      .default("false")
+      .transform((v) => v === "true"),
     VERIFY_TOKEN_TTL_MS: z.coerce.number().int().positive().default(24 * 60 * 60 * 1000),
     RESET_TOKEN_TTL_MS: z.coerce.number().int().positive().default(60 * 60 * 1000),
 
