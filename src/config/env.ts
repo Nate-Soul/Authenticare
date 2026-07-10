@@ -26,6 +26,17 @@ const envSchema = z
     RATE_LIMIT_MAX: z.coerce.number().int().positive().default(100),
     AUTH_RATE_LIMIT_WINDOW_MS: z.coerce.number().int().positive().default(15 * 60 * 1000),
     AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),
+
+    APP_URL: z.string().url().default("http://localhost:5000"),
+    MAIL_DRIVER: z.enum(["console", "smtp"]).default("console"),
+    MAIL_FROM: z.string().default("ARC <no-reply@example.com>"),
+    SMTP_HOST: z.string().optional(),
+    SMTP_PORT: z.coerce.number().int().positive().optional(),
+    SMTP_USER: z.string().optional(),
+    SMTP_PASS: z.string().optional(),
+    SMTP_SECURE: z.coerce.boolean().default(false),
+    VERIFY_TOKEN_TTL_MS: z.coerce.number().int().positive().default(24 * 60 * 60 * 1000),
+    RESET_TOKEN_TTL_MS: z.coerce.number().int().positive().default(60 * 60 * 1000),
   })
   .superRefine((val, ctx) => {
     if (val.DB_DRIVER === "mongo" && !val.MONGO_URI) {
@@ -40,6 +51,13 @@ const envSchema = z
         code: z.ZodIssueCode.custom,
         message: "DATABASE_URL is required when DB_DRIVER=postgres",
         path: ["DATABASE_URL"],
+      });
+    }
+    if (val.MAIL_DRIVER === "smtp" && (!val.SMTP_HOST || !val.SMTP_PORT)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "SMTP_HOST and SMTP_PORT are required when MAIL_DRIVER=smtp",
+        path: ["SMTP_HOST"],
       });
     }
   });
