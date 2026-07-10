@@ -1,0 +1,37 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  user
+  admin
+}
+
+model User {
+  id            String    @id @default(uuid()) @db.Uuid
+  firstName     String    @map("first_name")
+  lastName      String    @map("last_name")
+  email         String    @unique
+  password      String
+  role          UserRole  @default(user)
+  tokenVersion  Int       @default(0) @map("token_version")
+  emailVerified              Boolean   @default(false) @map("email_verified")
+  verificationTokenHash      String?   @map("verification_token_hash")
+  verificationTokenExpiresAt DateTime? @map("verification_token_expires_at")
+  passwordResetTokenHash     String?   @map("password_reset_token_hash")
+  passwordResetExpiresAt     DateTime? @map("password_reset_expires_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  deletedAt     DateTime? @map("deleted_at")
+
+  @@index([email])
+  @@index([createdAt])
+  @@index([verificationTokenHash])
+  @@index([passwordResetTokenHash])
+  @@map("users")
+}
