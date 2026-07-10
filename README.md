@@ -43,6 +43,15 @@ foundation instead of inheriting the same mistakes.
   refuses to start with a missing or malformed secret instead of failing weirdly at request time.
 - **Tests** — Vitest unit tests against a fake repository (no DB required) plus a Supertest
   integration smoke test, including regression tests for both original bugs.
+- **Email verification & password reset** — DB-stored, single-use, SHA-256-hashed tokens with
+  expiry; the mailer and queue are both pluggable so the flow works with zero infra by default.
+- **Pluggable mailer** — `MAIL_DRIVER=console` (default, logs the email — no SMTP needed) or
+  `MAIL_DRIVER=smtp` (nodemailer, loaded via dynamic import only when selected).
+- **Pluggable queue** — `QUEUE_DRIVER=inline` (default, in-process, no Redis needed) or
+  `QUEUE_DRIVER=bullmq` (Redis-backed, loaded via dynamic import only when selected). Email
+  sends run through the queue so they never block the request path.
+- **OpenAPI docs generated from the Zod schemas** — no hand-maintained spec to drift from the
+  validation. See "API docs" below.
 
 ## Getting started
 
@@ -53,6 +62,44 @@ docker compose up -d mongo    # or `postgres`, matching DB_DRIVER in .env
 npm run prisma:generate       # only needed if you're using the postgres driver — requires network access to fetch the query engine binary
 npm run dev
 ```
+
+## API docs
+
+Interactive Swagger UI is served at `GET /api/v1/docs`; the raw OpenAPI 3.0 document is at
+`GET /api/v1/docs.json`. It's generated from the same Zod schemas that validate requests, so it
+can't drift from the actual validation rules. Currently covers the `auth` module — see
+`src/shared/openapi/registry.ts` for how to register additional modules.
+
+## Auth endpoints
+
+| Method | Path | Auth required | Purpose |
+|---|---|---|---|
+| POST | `/api/v1/auth/register` | — | Create an account; sends a verification email |
+| POST | `/api/v1/auth/login` | — | Exchange credentials for access + refresh tokens |
+| POST | `/api/v1/auth/refresh` | refresh cookie | Rotate the refresh token, issue a new access token |
+| POST | `/api/v1/auth/logout` | access token | Revoke all outstanding refresh tokens (`tokenVersion` bump) |
+| POST | `/api/v1/auth/verify-email` | — | Consume a verification token, mark the account verified |
+| POST | `/api/v1/auth/resend-verification` | — | Re-issue a verification email (always 200 — no enumeration) |
+| POST | `/api/v1/auth/forgot-password` | — | Issue a password-reset email (always 200 — no enumeration) |
+| POST | `/api/v1/auth/reset-password` | — | Consume a reset token, set a new password, revoke all sessions |
+
+Gate any route on a verified email with the `requireVerified()` middleware
+(`src/shared/middleware/auth.ts`) — it runs after `requireAuth` and returns 403
+`EMAIL_NOT_VERIFIED` otherwise.
+
+## Mailer & queue drivers
+
+Both default to zero-infra, in-process implementations so the template runs with nothing but
+`npm install`. Swap in real infra by env var only — no code changes:
+
+| Concern | Env var | Default | Alternative |
+|---|---|---|---|
+| Mailer | `MAIL_DRIVER` | `console` (logs the email body, no SMTP) | `smtp` (nodemailer; requires `SMTP_HOST`, `SMTP_PORT`, optionally `SMTP_USER`/`SMTP_PASS`/`SMTP_SECURE`) |
+| Queue | `QUEUE_DRIVER` | `inline` (in-process, no Redis) | `bullmq` (Redis-backed; requires `REDIS_URL`) |
+
+Both real-infra drivers (`smtp.mailer.ts`, `bullmq.queue.ts`) are loaded via dynamic `import()`
+only when selected, so `nodemailer`/`bullmq` never touch the module graph — and therefore never
+open a socket — unless you opt in. See `src/shared/email/` and `src/shared/queue/`.
 
 ## Using this as a template for a new project
 
@@ -82,6 +129,12 @@ npm run dev
    ```bash
    node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
    ```
+
+5. **Drop what you don't need.** If the product has no email flows, delete `src/shared/email/`,
+   `src/shared/queue/`, the `verify-email`/`resend-verification`/`forgot-password`/`reset-password`
+   routes, and the `nodemailer`/`bullmq` dependencies. If you keep email but never need a real
+   queue, delete `src/shared/queue/bullmq.queue.ts` and the `bullmq` dependency — `inline.queue.ts`
+   has no external dependency and needs nothing removed.
 
 ## Project structure
 
@@ -124,5 +177,19 @@ tests/
 - Added a repository-pattern data layer (`shared/db/{mongo,postgres}`) instead of a single
   `shared/db.ts`, specifically to support the dual-driver requirement — document this choice if
   you diverge further.
-- No queue/worker or websocket layers included; add `shared/queue/` or `shared/websocket/` per
-  the ARC template when a project actually needs them.
+- No websocket layer included; add `shared/websocket/` per the ARC template when a project
+  actually needs it. A queue layer (`shared/queue/`) is included since the email flows depend
+  on it — see "Mailer & queue drivers" above.
+
+## Known limitations
+
+- **Single-session refresh.** `tokenVersion` is one counter per user, not per device/session.
+  Logging out, or a password reset, revokes every refresh token for that user — there's no way
+  to revoke one device's session while leaving others logged in. Add a per-session token table
+  if you need that.
+- **Soft-deleted emails hold the unique index.** Deleting a user sets `deletedAt` rather than
+  removing the row, but the email uniqueness constraint is on the raw column in both drivers.
+  A soft-deleted account's email can't be reused by a new signup. If you need that, either hard
+  delete on account removal or move to a partial/filtered unique index (Postgres: `@@unique`
+  with a `WHERE deleted_at IS NULL` condition; Mongo: a partial index with
+  `{ deletedAt: null }`).
