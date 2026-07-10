@@ -7,6 +7,7 @@ import { env } from "./config/env.js";
 import { logger } from "./shared/utils/logger.js";
 import { apiLimiter } from "./shared/middleware/rateLimiter.js";
 import { notFoundHandler, errorHandler } from "./shared/middleware/errorHandler.js";
+import { mountDocs } from "./shared/openapi/index.js";
 import v1Router from "./routes/v1/index.js";
 
 export function createApp(): Express {
@@ -28,6 +29,8 @@ export function createApp(): Express {
   app.use(apiLimiter);
 
   app.use("/api/v1", v1Router);
+
+  mountDocs(app);
 
   app.use(notFoundHandler);
   app.use(errorHandler);
