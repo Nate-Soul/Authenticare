@@ -1,6 +1,7 @@
 import { createApp } from "./app.js";
 import { env } from "./config/env.js";
 import { connectDatabase, disconnectDatabase } from "./shared/db/index.js";
+import { queue } from "./shared/queue/index.js";
 import { logger } from "./shared/utils/logger.js";
 
 async function main(): Promise<void> {
@@ -17,6 +18,8 @@ async function main(): Promise<void> {
   const shutdown = async (signal: string): Promise<void> => {
     logger.info(`${signal} received, shutting down gracefully`);
     server.close(async () => {
+      // Let in-flight background jobs (e.g. verification/reset emails) finish before we tear down.
+      await queue.drain();
       await disconnectDatabase();
       process.exit(0);
     });
