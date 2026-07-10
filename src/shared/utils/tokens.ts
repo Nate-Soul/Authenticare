@@ -27,13 +27,13 @@ export function signRefreshToken(userId: string, tokenVersion: number): string {
 }
 
 export function verifyAccessToken(token: string): AccessTokenPayload {
-  const decoded = jwt.verify(token, env.JWT_ACCESS_SECRET) as AccessTokenPayload;
+  const decoded = jwt.verify(token, env.JWT_ACCESS_SECRET, { algorithms: ["HS256"] }) as AccessTokenPayload;
   if (decoded.type !== "access") throw new Error("Not an access token");
   return decoded;
 }
 
 export function verifyRefreshToken(token: string): RefreshTokenPayload {
-  const decoded = jwt.verify(token, env.JWT_REFRESH_SECRET) as RefreshTokenPayload;
+  const decoded = jwt.verify(token, env.JWT_REFRESH_SECRET, { algorithms: ["HS256"] }) as RefreshTokenPayload;
   if (decoded.type !== "refresh") throw new Error("Not a refresh token");
   return decoded;
 }
@@ -41,6 +41,9 @@ export function verifyRefreshToken(token: string): RefreshTokenPayload {
 export const REFRESH_COOKIE_NAME = "refresh_token";
 
 export function refreshCookieOptions() {
+  // sameSite "strict": the refresh cookie is only sent for same-site requests. If your
+  // SPA lives on a different registrable domain than the API, switch to "none" (requires
+  // secure:true, i.e. HTTPS) or "lax".
   return {
     httpOnly: true,
     secure: env.NODE_ENV === "production",

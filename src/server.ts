@@ -26,6 +26,10 @@ async function main(): Promise<void> {
   process.on("unhandledRejection", (reason) => {
     logger.error({ reason }, "Unhandled promise rejection");
   });
+  process.on("uncaughtException", (err) => {
+    logger.error({ err }, "Uncaught exception — exiting");
+    process.exit(1);
+  });
 }
 
 main().catch((err) => {
