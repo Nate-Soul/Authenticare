@@ -1,6 +1,8 @@
 import bcrypt from "bcryptjs";
+import { Prisma } from "@prisma/client";
 import { prisma } from "./connection.js";
 import { env } from "../../../config/env.js";
+import { AppError } from "../../utils/AppError.js";
 import type {
   UserRepository,
   UserEntity,
@@ -10,6 +12,13 @@ import type {
   PaginatedResult,
 } from "../../types/user.js";
 import type { User as PrismaUser } from "@prisma/client";
+
+function isUnique(e: unknown): boolean {
+  return e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002";
+}
+function isNotFound(e: unknown): boolean {
+  return e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2025";
+}
 
 function toEntity(row: PrismaUser): UserEntity {
   return {
@@ -29,16 +38,21 @@ function toEntity(row: PrismaUser): UserEntity {
 export class PostgresUserRepository implements UserRepository {
   async create(input: CreateUserInput): Promise<UserEntity> {
     const hashed = await bcrypt.hash(input.password, env.BCRYPT_COST);
-    const row = await prisma.user.create({
-      data: {
-        firstName: input.firstName,
-        lastName: input.lastName,
-        email: input.email.toLowerCase(),
-        password: hashed,
-        role: input.role ?? "user",
-      },
-    });
-    return toEntity(row);
+    try {
+      const row = await prisma.user.create({
+        data: {
+          firstName: input.firstName,
+          lastName: input.lastName,
+          email: input.email.toLowerCase(),
+          password: hashed,
+          role: input.role ?? "user",
+        },
+      });
+      return toEntity(row);
+    } catch (e) {
+      if (isUnique(e)) throw AppError.conflict("An account with this email already exists");
+      throw e;
+    }
   }
 
   async findByEmail(email: string): Promise<UserEntity | null> {
@@ -81,8 +95,10 @@ export class PostgresUserRepository implements UserRepository {
     try {
       const row = await prisma.user.update({ where: { id }, data });
       return toEntity(row);
-    } catch {
-      return null;
+    } catch (e) {
+      if (isNotFound(e)) return null;
+      if (isUnique(e)) throw AppError.conflict("An account with this email already exists");
+      throw e;
     }
   }
 

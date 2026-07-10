@@ -53,4 +53,10 @@ describe("UsersService", () => {
     expect(items).toHaveLength(1);
     expect(total).toBe(1);
   });
+
+  it("rejects updating a user's email to one already taken with 409", async () => {
+    await repo.create({ firstName: "A", lastName: "A", email: "taken@example.com", password: "Str0ngPassw0rd" });
+    const b = await repo.create({ firstName: "B", lastName: "B", email: "free@example.com", password: "Str0ngPassw0rd" });
+    await expect(service.update(b.id, { email: "taken@example.com" })).rejects.toMatchObject({ code: "CONFLICT" });
+  });
 });

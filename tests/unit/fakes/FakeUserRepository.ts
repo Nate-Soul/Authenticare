@@ -8,11 +8,15 @@ import type {
   PaginationParams,
   PaginatedResult,
 } from "../../src/shared/types/user.js";
+import { AppError } from "../../../src/shared/utils/AppError.js";
 
 export class FakeUserRepository implements UserRepository {
   private users = new Map<string, UserEntity>();
 
   async create(input: CreateUserInput): Promise<UserEntity> {
+    const dupe = [...this.users.values()].find((u) => u.email === input.email.toLowerCase() && !u.deletedAt);
+    if (dupe) throw AppError.conflict("An account with this email already exists");
+
     const now = new Date();
     const user: UserEntity = {
       id: randomUUID(),
@@ -52,7 +56,13 @@ export class FakeUserRepository implements UserRepository {
     if (!user) return null;
     if (input.firstName !== undefined) user.firstName = input.firstName;
     if (input.lastName !== undefined) user.lastName = input.lastName;
-    if (input.email !== undefined) user.email = input.email.toLowerCase();
+    if (input.email !== undefined) {
+      const dupe = [...this.users.values()].find(
+        (u) => u.email === input.email!.toLowerCase() && u.id !== id && !u.deletedAt,
+      );
+      if (dupe) throw AppError.conflict("An account with this email already exists");
+      user.email = input.email.toLowerCase();
+    }
     if (input.password !== undefined) user.password = await bcrypt.hash(input.password, 4);
     user.updatedAt = new Date();
     return user;

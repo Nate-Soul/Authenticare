@@ -1,4 +1,5 @@
 import { UserModel, type UserDocument } from "./user.schema.js";
+import { AppError } from "../../utils/AppError.js";
 import type {
   UserRepository,
   UserEntity,
@@ -7,6 +8,10 @@ import type {
   PaginationParams,
   PaginatedResult,
 } from "../../types/user.js";
+
+function isDuplicate(e: unknown): boolean {
+  return typeof e === "object" && e !== null && (e as { code?: number }).code === 11000;
+}
 
 function toEntity(doc: UserDocument): UserEntity {
   return {
@@ -25,14 +30,19 @@ function toEntity(doc: UserDocument): UserEntity {
 
 export class MongoUserRepository implements UserRepository {
   async create(input: CreateUserInput): Promise<UserEntity> {
-    const doc = await UserModel.create({
-      firstName: input.firstName,
-      lastName: input.lastName,
-      email: input.email.toLowerCase(),
-      password: input.password, // hashed by the pre-save hook
-      role: input.role ?? "user",
-    });
-    return toEntity(doc);
+    try {
+      const doc = await UserModel.create({
+        firstName: input.firstName,
+        lastName: input.lastName,
+        email: input.email.toLowerCase(),
+        password: input.password, // hashed by the pre-save hook
+        role: input.role ?? "user",
+      });
+      return toEntity(doc);
+    } catch (e) {
+      if (isDuplicate(e)) throw AppError.conflict("An account with this email already exists");
+      throw e;
+    }
   }
 
   async findByEmail(email: string): Promise<UserEntity | null> {
@@ -69,7 +79,12 @@ export class MongoUserRepository implements UserRepository {
     if (input.email !== undefined) doc.email = input.email.toLowerCase();
     if (input.password !== undefined) doc.password = input.password; // triggers re-hash via pre-save hook
 
-    await doc.save();
+    try {
+      await doc.save();
+    } catch (e) {
+      if (isDuplicate(e)) throw AppError.conflict("An account with this email already exists");
+      throw e;
+    }
     return toEntity(doc);
   }
 
