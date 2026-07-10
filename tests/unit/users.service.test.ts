@@ -43,4 +43,14 @@ describe("UsersService", () => {
     await service.remove(created.id);
     await expect(service.getById(created.id)).rejects.toMatchObject({ code: "NOT_FOUND" });
   });
+
+  it("excludes soft-deleted users from pagination total (regression)", async () => {
+    const a = await repo.create({ firstName: "A", lastName: "A", email: "pa@example.com", password: "Str0ngPassw0rd" });
+    await repo.create({ firstName: "B", lastName: "B", email: "pb@example.com", password: "Str0ngPassw0rd" });
+    await service.remove(a.id);
+
+    const { total, items } = await service.list({ page: 1, limit: 20 });
+    expect(items).toHaveLength(1);
+    expect(total).toBe(1);
+  });
 });

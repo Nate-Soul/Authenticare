@@ -49,7 +49,7 @@ export class MongoUserRepository implements UserRepository {
     const skip = (page - 1) * limit;
     const [docs, total] = await Promise.all([
       UserModel.find().sort({ createdAt: -1 }).skip(skip).limit(limit),
-      UserModel.countDocuments(),
+      UserModel.countDocuments({ deletedAt: null }),
     ]);
     return {
       items: docs.map(toEntity),
