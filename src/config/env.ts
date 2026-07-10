@@ -37,6 +37,9 @@ const envSchema = z
     SMTP_SECURE: z.coerce.boolean().default(false),
     VERIFY_TOKEN_TTL_MS: z.coerce.number().int().positive().default(24 * 60 * 60 * 1000),
     RESET_TOKEN_TTL_MS: z.coerce.number().int().positive().default(60 * 60 * 1000),
+
+    QUEUE_DRIVER: z.enum(["inline", "bullmq"]).default("inline"),
+    REDIS_URL: z.string().optional(),
   })
   .superRefine((val, ctx) => {
     if (val.DB_DRIVER === "mongo" && !val.MONGO_URI) {
@@ -58,6 +61,13 @@ const envSchema = z
         code: z.ZodIssueCode.custom,
         message: "SMTP_HOST and SMTP_PORT are required when MAIL_DRIVER=smtp",
         path: ["SMTP_HOST"],
+      });
+    }
+    if (val.QUEUE_DRIVER === "bullmq" && !val.REDIS_URL) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "REDIS_URL is required when QUEUE_DRIVER=bullmq",
+        path: ["REDIS_URL"],
       });
     }
   });

@@ -6,6 +6,9 @@ import { logger } from "./shared/utils/logger.js";
 async function main(): Promise<void> {
   await connectDatabase();
 
+  const { registerSendEmailJob } = await import("./shared/queue/jobs/sendEmail.job.js");
+  registerSendEmailJob();
+
   const app = createApp();
   const server = app.listen(env.PORT, () => {
     logger.info(`🚀 Server listening on port ${env.PORT} [${env.NODE_ENV}] (db: ${env.DB_DRIVER})`);
