@@ -5,6 +5,7 @@ import { asyncHandler } from "../../shared/utils/asyncHandler.js";
 import { sendSuccess } from "../../shared/utils/response.js";
 import { AppError } from "../../shared/utils/AppError.js";
 import { REFRESH_COOKIE_NAME, refreshCookieOptions } from "../../shared/utils/tokens.js";
+import { logger } from "../../shared/utils/logger.js";
 import type {
   RegisterInput,
   LoginInput,
@@ -52,8 +53,10 @@ export const resendVerification = asyncHandler(
   async (req: Request<unknown, unknown, ResendVerificationInput>, res: Response) => {
     // Fire-and-forget: respond identically and immediately whether or not the account exists
     // (or is already verified), so neither the response body nor its timing leaks that fact.
-    // Any background/repository failure is swallowed — never surfaced to the client.
-    void authService.resendVerification(req.body.email).catch(() => undefined);
+    // Any background/repository failure is logged server-side but never surfaced to the client.
+    void authService
+      .resendVerification(req.body.email)
+      .catch((err) => logger.error({ err }, "resendVerification background failure"));
     sendSuccess(res, { message: "If the account exists and is unverified, a new link has been sent" });
   },
 );
@@ -61,7 +64,9 @@ export const resendVerification = asyncHandler(
 export const forgotPassword = asyncHandler(
   async (req: Request<unknown, unknown, ForgotPasswordInput>, res: Response) => {
     // Fire-and-forget for the same anti-enumeration reason as resendVerification above.
-    void authService.forgotPassword(req.body.email).catch(() => undefined);
+    void authService
+      .forgotPassword(req.body.email)
+      .catch((err) => logger.error({ err }, "forgotPassword background failure"));
     sendSuccess(res, { message: "If the account exists, a reset link has been sent" });
   },
 );
