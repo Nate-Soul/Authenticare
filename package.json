@@ -20,7 +20,7 @@
     "test:coverage": "vitest run --coverage",
     "prisma:generate": "prisma generate --schema=src/shared/db/postgres/schema.prisma",
     "prisma:migrate": "prisma migrate dev --schema=src/shared/db/postgres/schema.prisma",
-    "prepare": "husky install"
+    "prepare": "husky"
   },
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "^7.1.1",
