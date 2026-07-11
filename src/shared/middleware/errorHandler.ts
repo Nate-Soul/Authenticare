@@ -17,12 +17,12 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
   }
 
   if (err instanceof AppError) {
-    if (err.statusCode >= 500) logger.error({ err }, err.message);
+    if (err.statusCode >= 500) logger.error({ err, reqId: req.id }, err.message);
     sendError(res, err.statusCode, err.code, err.message, err.details);
     return;
   }
 
-  logger.error({ err }, "Unhandled error");
+  logger.error({ err, reqId: req.id }, "Unhandled error");
   sendError(
     res,
     500,

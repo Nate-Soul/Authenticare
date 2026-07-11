@@ -15,3 +15,7 @@ prisma/*.db
 .DS_Store
 # Prisma generated client (regenerated on install)
 src/generated/
+branch_structure.json
+temp_auto_push.bat
+temp_interactive_push.bat
+.gitignore

@@ -6,6 +6,7 @@ import { pinoHttp } from "pino-http";
 import { env } from "./config/env.js";
 import { logger } from "./shared/utils/logger.js";
 import { apiLimiter } from "./shared/middleware/rateLimiter.js";
+import { requestId } from "./shared/middleware/requestId.js";
 import { notFoundHandler, errorHandler } from "./shared/middleware/errorHandler.js";
 import { mountDocs } from "./shared/openapi/index.js";
 import v1Router from "./routes/v1/index.js";
@@ -25,6 +26,10 @@ export function createApp(): Express {
   app.use(express.json({ limit: "10kb" }));
   app.use(express.urlencoded({ extended: true, limit: "10kb" }));
   app.use(cookieParser());
+  // Mounted before pino-http: pino-http only calls genReqId when req.id is
+  // still unset, so this is the single source of truth for the id that ends
+  // up on the X-Request-Id response header, req.id, and every access log line.
+  app.use(requestId);
   app.use(pinoHttp({ logger, autoLogging: env.NODE_ENV !== "test" }));
   app.use(apiLimiter);
 
